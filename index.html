@@ -236,6 +236,7 @@ function acuCard(l){
 /* ---------- screens ---------- */
 var S={};
 S.home=function(){
+  if(NAME&&ME&&ME.final)return finalPage(ME.final);
   var h=header();
   if(B.day<1)return h+'<div class="card ctr">'+esc(C('before_start'))+'</div>'+rulesCard();
   var ended=B.week===4, d21open=ended&&B.reflectionsOpen.length;
@@ -334,7 +335,7 @@ S.refl=function(){
 
 /* Done */
 S.done=function(){
-  if(LASTR&&LASTR.reflection==='21')return finalPage();
+  if(LASTR&&LASTR.reflection==='21')return finalPage(ME&&ME.final?ME.final:LASTR);
   var h=header(),l=F.lens;
   if(LAST)h+='<div class="card ctr"><div class="tick">✓</div><div class="big">'+esc(fill(C('done_title'),{day:B.day}))+'</div><div class="mut">'+esc(B.day>=B.total?C('done_line_final'):C('done_line'))+'</div></div>';
   if(LASTR){
@@ -361,8 +362,9 @@ function short(a){
   a=a.split(/,| \/ /)[0].trim();
   return a;
 }
-function finalPage(){
+function finalPage(fd){
   var h=header(C('final_pill')),me=ME||{},first=String(NAME).split(' ')[0];
+  if(F.fb==null&&fd.joinAgain){F.fb=fd.joinAgain;F.fbSaved=true;}
   h+='<div class="ctr fin"><div class="big">'+esc(fill(C('final_title'),{name:first}))+'</div><p class="mut">'+br(C('final_intro'))+'</p></div>';
   /* journey */
   var stats=[[me.count||0,C('final_stat_nights')],[(me.reflectionsDone||[]).length+'/3',C('final_stat_refl')]];
@@ -372,7 +374,7 @@ function finalPage(){
   var d=me.days||[],dh='<div class="dots">';for(var i=1;i<=B.total;i++)dh+='<span class="'+(d.indexOf(i)>-1?'y':'')+'">'+i+'</span>';
   h+=dh+'</div>';
   /* shift */
-  var rows=(LASTR.shift||[]).filter(function(x){return x.before;});
+  var rows=(fd.shift||[]).filter(function(x){return x.before;});
   if(rows.length){
     var moved=rows.filter(function(x){return x.after&&String(x.before).trim().toLowerCase()!==String(x.after).trim().toLowerCase();});
     h+='<div class="lab2">'+esc(C('final_shift_label'))+'</div><div class="card">';
@@ -385,7 +387,7 @@ function finalPage(){
   }
   /* reward */
   var win,cls;
-  if(me.qualified&&LASTR.malaysia){win=fill(C('final_win_my'),{name:first,entries:entriesText(me.entries)});cls='ok';}
+  if(me.qualified&&fd.malaysia){win=fill(C('final_win_my'),{name:first,entries:entriesText(me.entries)});cls='ok';}
   else if(me.qualified){win=fill(C('final_win_os'),{name:first});cls='acc';}
   else{win=fill(C('final_win_no'),{count:me.count||0});cls='';}
   h+='<div class="card '+cls+' win">'+br(win)+'</div>';
@@ -396,8 +398,7 @@ function finalPage(){
   h+=errBox();
   /* share + close */
   h+='<a class="btn wa" href="https://wa.me/?text='+encodeURIComponent(fill(C('final_share'),{count:me.count||0}))+'" target="_blank" rel="noopener">'+esc(C('share_btn'))+'</a>';
-  h+='<p class="closing">'+br(C('final_closing'))+'</p>';
-  return h+'<button class="link" data-go="home">'+esc(C('back_home'))+'</button>';
+  return h+'<p class="closing">'+br(C('final_closing'))+'</p>';
 }
 
 /* ---------- render + events ---------- */
@@ -422,7 +423,7 @@ app.addEventListener('click',function(e){
   if(act==='start'){F={};LAST=null;LASTR=null;go(B.week===1?'w1q':B.week===2?'choose':'since');}
   if(act==='morning'){F={};go('mmenu');}
   if(act==='fb'){var v=a.getAttribute('data-v');if(F.fb===v&&F.fbSaved)return;F.fb=v;F.fbSaved=false;
-    call('submitFeedback',[{name:NAME,answer:v}],function(){F.fbSaved=true;render();});return;}
+    call('submitFeedback',[{name:NAME,answer:v}],function(){F.fbSaved=true;if(ME&&ME.final)ME.final.joinAgain=v;render();});return;}
   if(act==='mshow'){if(!need(['m'],'Please choose one first.'))return;go('mprac');}
   if(act==='w1next'){if(!need(['q1','q2']))return;if(F.q1===F.q2){F.lens=F.q1;F.q3='';go('w1res');}else go('w1q3');}
   if(act==='w1q3'){if(!need(['q3']))return;F.lens=F.q3;go('w1res');}
