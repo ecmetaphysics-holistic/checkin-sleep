@@ -101,7 +101,7 @@ var TZ=(function(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||
 function server(fn,args,ok,fail){
   if(window.google&&google.script&&google.script.run){google.script.run.withSuccessHandler(ok).withFailureHandler(fail)[fn].apply(null,args);return;}
   var e=encodeURIComponent,req;
-  if(fn==='getBoot') req=fetch(API_URL+'?action=boot&day='+e(args[0]||'')+'&hour='+e(args[1]==null?'':args[1])+'&tz='+e(args[2]||''),{credentials:'omit'});
+  if(fn==='getBoot') req=fetch(API_URL+'?action=boot&day='+e(args[0]||'')+'&hour='+e(args[1]==null?'':args[1])+'&tz='+e(args[2]||'')+'&name='+e(args[3]||''),{credentials:'omit'});
   else if(fn==='getMe') req=fetch(API_URL+'?action=me&name='+e(args[0])+'&day='+e(args[1]||'')+'&tz='+e(args[2]||''),{credentials:'omit'});
   else req=fetch(API_URL,{method:'POST',credentials:'omit',body:JSON.stringify({action:fn==='submitCheckin'?'checkin':'reflection',payload:args[0]})});
   req.then(function(r){return r.json();}).then(function(j){if(j&&j.ok)ok(j.data);else fail({message:(j&&j.error)||'Something went wrong. Please try again.'});})
@@ -127,10 +127,10 @@ function val(id){return String(F['t_'+id]||'').trim();}
 
 /* ---------- start ---------- */
 function boot(){
-  server('getBoot',[PDAY,PHOUR,TZ],function(b){
+  var saved=recall('cultivate_name');
+  server('getBoot',[PDAY,PHOUR,TZ,saved],function(b){
     B=b;theme();
-    var saved=recall('cultivate_name');
-    if(saved&&B.names.indexOf(saved)>-1){NAME=saved;loadMe();}else render();
+    if(saved&&B.names.indexOf(saved)>-1){NAME=saved;if(B.me){ME=B.me;render();}else loadMe();}else render();
   },function(e){app.innerHTML='<div class="load">Could not load. Please refresh.<br><small>'+esc(e&&e.message)+'</small></div>';});
 }
 function loadMe(){server('getMe',[NAME,PDAY,TZ],function(m){ME=m;render();},function(){ME=null;render();});}
