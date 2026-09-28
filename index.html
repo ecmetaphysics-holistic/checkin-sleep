@@ -84,6 +84,22 @@
   .err{color:#B3261E;font-size:14px;margin-top:10px}
   .part{margin-top:22px;padding-top:12px;border-top:1px dashed #D8CFC3;font-size:12px;letter-spacing:.06em;color:var(--p);font-weight:600}
   .load{text-align:center;padding:60px 0;color:var(--mut)}
+  .pill.done{background:var(--oks);color:var(--ok)}
+  .fin .big{margin-top:6px}
+  .lab2{font-size:11px;letter-spacing:.06em;color:var(--mut);font-weight:600;margin:18px 0 8px}
+  .stats{display:grid;gap:8px}
+  .stats div{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 6px;text-align:center}
+  .stats b{display:block;font-size:22px;font-weight:600}
+  .stats span{font-size:12px;color:var(--mut);line-height:1.3;display:block}
+  .shl{font-weight:600}
+  .shd{margin-top:8px}
+  .shd summary{cursor:pointer;color:var(--p);font-size:14px;font-weight:500}
+  .shr{display:flex;justify-content:space-between;gap:10px;font-size:14px;padding:7px 0;border-bottom:1px solid var(--line)}
+  .shr:last-child{border-bottom:0}
+  .shr span:first-child{color:var(--mut)}
+  .shr span:last-child{text-align:right}
+  .win{font-size:15px;line-height:1.6;margin-top:14px}
+  .opt.fq{padding:12px 14px}
 </style>
 </head>
 <body>
@@ -103,7 +119,7 @@ function server(fn,args,ok,fail){
   var e=encodeURIComponent,req;
   if(fn==='getBoot') req=fetch(API_URL+'?action=boot&day='+e(args[0]||'')+'&hour='+e(args[1]==null?'':args[1])+'&tz='+e(args[2]||'')+'&name='+e(args[3]||''),{credentials:'omit'});
   else if(fn==='getMe') req=fetch(API_URL+'?action=me&name='+e(args[0])+'&day='+e(args[1]||'')+'&tz='+e(args[2]||''),{credentials:'omit'});
-  else req=fetch(API_URL,{method:'POST',credentials:'omit',body:JSON.stringify({action:fn==='submitCheckin'?'checkin':'reflection',payload:args[0]})});
+  else req=fetch(API_URL,{method:'POST',credentials:'omit',body:JSON.stringify({action:fn==='submitCheckin'?'checkin':fn==='submitFeedback'?'feedback':'reflection',payload:args[0]})});
   req.then(function(r){return r.json();}).then(function(j){if(j&&j.ok)ok(j.data);else fail({message:(j&&j.error)||'Something went wrong. Please try again.'});})
     .catch(function(){fail({message:'Connection problem. Please check your internet and try again.'});});
 }
@@ -147,11 +163,12 @@ function call(fn,args,ok){
 }
 
 /* ---------- building blocks ---------- */
-function header(){
+function header(pill){
   var s=B.settings,h='';
   if(B.preview)h+='<div class="pv">Preview mode · Day '+B.day+(B.week===3?' · '+B.hour+':00':'')+'</div>';
   h+='<div class="top">'+(s.logo_url?img(s.logo_url,'logo'):'')+'<div class="nm">'+esc(s.program_name)+'</div><div class="sb">'+esc(s.subtitle)+'</div>';
-  if(B.day>=1&&B.day<=B.total)h+='<div class="pill">Day '+B.day+' of '+B.total+' · '+esc(C('w'+B.week+'_label'))+'</div>';
+  if(pill)h+='<div class="pill done">'+esc(pill)+'</div>';
+  else if(B.day>=1&&B.day<=B.total)h+='<div class="pill">Day '+B.day+' of '+B.total+' · '+esc(C('w'+B.week+'_label'))+'</div>';
   return h+'</div>';
 }
 function opt(field,v,key,title,sub,cls){
@@ -317,19 +334,11 @@ S.refl=function(){
 
 /* Done */
 S.done=function(){
+  if(LASTR&&LASTR.reflection==='21')return finalPage();
   var h=header(),l=F.lens;
   if(LAST)h+='<div class="card ctr"><div class="tick">✓</div><div class="big">'+esc(fill(C('done_title'),{day:B.day}))+'</div><div class="mut">'+esc(B.day>=B.total?C('done_line_final'):C('done_line'))+'</div></div>';
   if(LASTR){
     h+='<div class="card ok ctr" style="font-weight:600">'+esc(C('r_saved'))+'</div>';
-    if(LASTR.reflection==='21'){
-      if(LASTR.shift&&LASTR.shift.length){
-        h+='<div class="card"><div style="font-weight:600;margin-bottom:4px">'+esc(C('r21_shift_title'))+'</div><table class="shift">';
-        LASTR.shift.forEach(function(s){h+='<tr><td colspan="3" class="q">'+esc(s.q)+'</td></tr><tr><td>'+esc(s.before||'—')+'</td><td class="arrow">→</td><td><b>'+esc(s.after||'—')+'</b></td></tr>';});
-        h+='</table></div>';
-      }
-      if(ME&&ME.bedTotal)h+='<div class="card ctr">'+esc(fill(C('r21_bed_line'),{early:ME.bedEarly,total:ME.bedTotal}))+'</div>';
-      h+='<div class="card acc ctr">'+esc(ME&&ME.qualified?fill(C('final_qualified'),{entries:entriesText(ME.entries)}):fill(C('final_not_yet'),{missing:ME?missingList():''}))+'</div>';
-    }
   }
   h+=progressCard();
   var share;
@@ -344,6 +353,52 @@ S.done=function(){
   if(LAST)h+='<div style="height:12px"></div>'+groupCard('done');
   return h+'<button class="link" data-go="home">'+esc(C('back_home'))+'</button>';
 };
+
+/* Final page (after the Day 21 reflection) */
+function short(a){
+  a=String(a||'').trim();
+  a=a.replace(/^Less than /i,'<').replace(/^More than /i,'>').replace(/ hours?\b/g,'h').replace(/ minutes?\b/g,'m').replace(/ times\b/g,'×');
+  a=a.split(/,| \/ /)[0].trim();
+  return a;
+}
+function finalPage(){
+  var h=header(C('final_pill')),me=ME||{},first=String(NAME).split(' ')[0];
+  h+='<div class="ctr fin"><div class="big">'+esc(fill(C('final_title'),{name:first}))+'</div><p class="mut">'+br(C('final_intro'))+'</p></div>';
+  /* journey */
+  var stats=[[me.count||0,C('final_stat_nights')],[(me.reflectionsDone||[]).length+'/3',C('final_stat_refl')]];
+  if(me.bedTotal)stats.push([me.bedEarly+'/'+me.bedTotal,C('final_stat_bed')]);
+  h+='<div class="lab2">'+esc(C('final_journey_label'))+'</div><div class="stats" style="grid-template-columns:repeat('+stats.length+',minmax(0,1fr))">'+
+    stats.map(function(x){return '<div><b>'+esc(x[0])+'</b><span>'+esc(x[1])+'</span></div>';}).join('')+'</div>';
+  var d=me.days||[],dh='<div class="dots">';for(var i=1;i<=B.total;i++)dh+='<span class="'+(d.indexOf(i)>-1?'y':'')+'">'+i+'</span>';
+  h+=dh+'</div>';
+  /* shift */
+  var rows=(LASTR.shift||[]).filter(function(x){return x.before;});
+  if(rows.length){
+    var moved=rows.filter(function(x){return x.after&&String(x.before).trim().toLowerCase()!==String(x.after).trim().toLowerCase();});
+    h+='<div class="lab2">'+esc(C('final_shift_label'))+'</div><div class="card">';
+    if(moved.length)h+='<div class="shl">'+esc(fill(C('final_shift_line'),{n:moved.length,total:rows.length}))+'</div><div class="mut small">'+esc(moved.map(function(x){return x.short||x.q;}).join(' · '))+'</div>';
+    else h+='<div class="shl">'+esc(C('final_shift_none'))+'</div>';
+    h+='<details class="shd"><summary>'+esc(C('final_shift_toggle'))+'</summary>'+rows.map(function(x){
+      var same=!x.after||moved.indexOf(x)===-1;
+      return '<div class="shr"><span>'+esc(x.short||x.q)+'</span><span>'+esc(short(x.before))+' → '+(same?esc(C('final_same')):'<b>'+esc(short(x.after))+'</b>')+'</span></div>';
+    }).join('')+'</details></div>';
+  }
+  /* reward */
+  var win,cls;
+  if(me.qualified&&LASTR.malaysia){win=fill(C('final_win_my'),{name:first,entries:entriesText(me.entries)});cls='ok';}
+  else if(me.qualified){win=fill(C('final_win_os'),{name:first});cls='acc';}
+  else{win=fill(C('final_win_no'),{count:me.count||0});cls='';}
+  h+='<div class="card '+cls+' win">'+br(win)+'</div>';
+  /* last question */
+  h+='<div class="lab2">'+esc(C('final_q_label'))+'</div><p style="font-weight:600">'+esc(C('final_q'))+'</p>';
+  h+=list('final_q_options').map(function(o){return '<div class="opt fq'+(F.fb===o?' sel':'')+'" data-act="fb" data-v="'+esc(o)+'"><div>'+esc(o)+'</div></div>';}).join('');
+  if(F.fbSaved)h+='<div class="mut ctr" style="margin-top:6px">'+esc(C('final_q_thanks'))+'</div>';
+  h+=errBox();
+  /* share + close */
+  h+='<a class="btn wa" href="https://wa.me/?text='+encodeURIComponent(fill(C('final_share'),{count:me.count||0}))+'" target="_blank" rel="noopener">'+esc(C('share_btn'))+'</a>';
+  h+='<p class="closing">'+br(C('final_closing'))+'</p>';
+  return h+'<button class="link" data-go="home">'+esc(C('back_home'))+'</button>';
+}
 
 /* ---------- render + events ---------- */
 function render(){
@@ -366,6 +421,8 @@ app.addEventListener('click',function(e){
   var act=a.getAttribute('data-act');
   if(act==='start'){F={};LAST=null;LASTR=null;go(B.week===1?'w1q':B.week===2?'choose':'since');}
   if(act==='morning'){F={};go('mmenu');}
+  if(act==='fb'){var v=a.getAttribute('data-v');if(F.fb===v&&F.fbSaved)return;F.fb=v;F.fbSaved=false;
+    call('submitFeedback',[{name:NAME,answer:v}],function(){F.fbSaved=true;render();});return;}
   if(act==='mshow'){if(!need(['m'],'Please choose one first.'))return;go('mprac');}
   if(act==='w1next'){if(!need(['q1','q2']))return;if(F.q1===F.q2){F.lens=F.q1;F.q3='';go('w1res');}else go('w1q3');}
   if(act==='w1q3'){if(!need(['q3']))return;F.lens=F.q3;go('w1res');}
