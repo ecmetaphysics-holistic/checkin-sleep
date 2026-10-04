@@ -60,10 +60,18 @@
   .end{font-weight:600}
   .closing{font-family:Lora,Georgia,serif;text-align:center;color:var(--p);margin:12px 0 4px;font-size:17px}
   .safety{font-size:13px;color:var(--mut);text-align:center;border-top:1px solid var(--line);padding-top:10px;margin-top:14px}
-  .pt{border-top:1px solid #EEE7DE;padding-top:12px;margin-top:12px}
-  .pt b{font-weight:600;display:block;margin-bottom:6px}
-  .pt img{width:150px;height:150px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 10px}
-  .how{background:var(--ps);border-radius:10px;padding:9px 11px;margin-top:12px;font-size:14px}
+  .pts{display:grid;gap:14px;margin-top:12px}
+  .pts.two{grid-template-columns:1fr 1fr}
+  .pt{text-align:center;min-width:0}
+  .pt b{font-weight:600;display:block;font-size:14px;line-height:1.35}
+  .pt img{width:120px;height:120px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 8px}
+  .find{margin-top:6px;font-size:14px}
+  .find summary{color:var(--p);cursor:pointer;font-weight:500;list-style:none}
+  .find summary::-webkit-details-marker{display:none}
+  .find summary:after{content:' ▾'}
+  .find[open] summary:after{content:' ▴'}
+  .find div{text-align:left;color:var(--tx);margin-top:6px;font-size:14px}
+  .how{background:var(--ps);border-radius:10px;padding:9px 11px;margin-top:8px;font-size:14px}
   .dots{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin:10px 0}
   .dots span{aspect-ratio:1;border-radius:50%;border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--mut);background:#fff;max-width:46px;justify-self:center;width:100%}
   .dots span.y{background:var(--ok);border-color:var(--ok);color:#fff}
@@ -228,9 +236,12 @@ function groupCard(kind){
 function errBox(){return ERR?'<div class="err">'+esc(ERR)+'</div>':'';}
 function btn(label,act,cls){return errBox()+'<button class="btn'+(cls?' '+cls:'')+'" data-act="'+act+'"'+(BUSY?' disabled':'')+'>'+(BUSY?'Saving…':esc(label))+'</button>';}
 function acuCard(l){
-  var h='<div class="card acc"><div class="lab">'+esc(C('acu_label'))+'</div>';
-  [1,2].forEach(function(n){var k='acu_'+l+n;if(!C(k+'_name'))return;h+='<div class="pt"><b>'+esc(C(k+'_name'))+'</b>'+img(C(k+'_image'))+'<div>'+esc(C(k+'_text'))+'</div></div>';});
-  return h+'<div class="how"><b>How:</b> '+esc(C('acu_how'))+'</div>'+(C('acu_'+l+'_tcm')?'<div class="tcm">TCM lens: '+esc(C('acu_'+l+'_tcm'))+'</div>':'')+'</div>';
+  var h='<div class="card acc"><div class="lab">'+esc(C('acu_label'))+'</div><div class="how"><b>How:</b> '+esc(C('acu_how'))+'</div>';
+  var pts=[1,2].filter(function(n){return C('acu_'+l+n+'_name');});
+  h+='<div class="pts'+(pts.length>1?' two':'')+'">';
+  pts.forEach(function(n){var k='acu_'+l+n;
+    h+='<div class="pt">'+img(C(k+'_image'))+'<b>'+esc(C(k+'_name'))+'</b>'+(C(k+'_text')?'<details class="find"><summary>'+esc(C('acu_find')||'How to find it')+'</summary><div>'+esc(C(k+'_text'))+'</div></details>':'')+'</div>';});
+  return h+'</div>'+(C('acu_'+l+'_tcm')?'<div class="tcm">TCM lens: '+esc(C('acu_'+l+'_tcm'))+'</div>':'')+'</div>';
 }
 
 /* ---------- screens ---------- */
