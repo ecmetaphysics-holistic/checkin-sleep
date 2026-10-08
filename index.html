@@ -5,7 +5,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>21 Days Check-In</title>
-<link href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://script.google.com" crossorigin>
+<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <style>
   :root{--p:#6B5B95;--ps:rgba(107,91,149,.10);--pb:rgba(107,91,149,.35);--bg:#F7F3EE;--tx:#2E2A26;--mut:#7A736B;--line:#E6DFD6;--ok:#4E8B5F;--oks:#E4F1E6;--sun:#E8A33D;--suns:#FFF7E8;--sunb:#F1D9A8;--sunt:#B07418}
   *{box-sizing:border-box}
@@ -57,7 +60,10 @@
   .link{background:none;border:0;color:var(--mut);font:inherit;font-size:14px;text-decoration:underline;cursor:pointer;display:block;margin:14px auto 0}
   ol,ul{margin:6px 0 8px;padding-left:22px}
   li{margin:3px 0}
-  .end{font-weight:600}
+  .end{font-weight:600;margin-top:10px}
+  .stp{border-top:1px solid #EEE7DE;padding-top:10px;margin-top:10px;font-size:15px;line-height:1.55}
+  .stp b{display:block;margin-bottom:3px}
+  .pin{background:var(--ps);border-radius:10px;padding:9px 11px;margin-top:8px;font-size:14px}
   .closing{font-family:Lora,Georgia,serif;text-align:center;color:var(--p);margin:12px 0 4px;font-size:17px}
   .safety{font-size:13px;color:var(--mut);text-align:center;border-top:1px solid var(--line);padding-top:10px;margin-top:14px}
   .pts{display:grid;gap:14px;margin-top:12px}
@@ -92,6 +98,11 @@
   .err{color:#B3261E;font-size:14px;margin-top:10px}
   .part{margin-top:22px;padding-top:12px;border-top:1px dashed #D8CFC3;font-size:12px;letter-spacing:.06em;color:var(--p);font-weight:600}
   .load{text-align:center;padding:60px 0;color:var(--mut)}
+  .load .retry{max-width:260px;margin:16px auto 0}
+  .slow{margin-top:10px;font-size:14px;color:var(--mut);line-height:1.5}
+  .upd{background:var(--ps);color:var(--p);border-radius:10px;padding:7px 10px;font-size:13px;text-align:center;margin-bottom:10px}
+  .upd .lnk{background:none;border:0;color:var(--p);font:inherit;font-weight:600;text-decoration:underline;cursor:pointer;padding:0 0 0 4px}
+  .stale .btn,.stale .opt,.stale select,.stale .link,.stale .chip{pointer-events:none;opacity:.55}
   .pill.done{background:var(--oks);color:var(--ok)}
   .fin .big{margin-top:6px}
   .lab2{font-size:11px;letter-spacing:.06em;color:var(--mut);font-weight:600;margin:18px 0 8px}
@@ -117,6 +128,10 @@
 var API_URL = 'https://script.google.com/macros/s/AKfycbw3hN4ZBLvuvELFaJxwNJqGwWaXOzlFPFPTgMCI7YErnyuNx3Rf3eWxCmLWaRykcwdv/exec';
 
 var B=null, ME=null, NAME='', PDAY=null, PHOUR=null, F={}, SCR='home', LAST=null, LASTR=null, REFL=null, BUSY=false, ERR='';
+var STALE=false, SLOW=false, BOOTFAIL='', SAVESLOW=false, PAGE_KEY='cultivate_page_v1';
+var MSG_SLOW="Still loading… If you're on wifi, try switching to mobile data.";
+var MSG_NET="Couldn't connect. If you're on wifi, try switching to mobile data, then try again.";
+var MSG_SAVE_SLOW="Still saving… If you're on wifi, try switching to mobile data.";
 var app=document.getElementById('app');
 var LENS=['A','B','C'], ICON={A:'☾',B:'〰',C:'♨'};
 var TZ=(function(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'';}catch(e){return '';}})();
@@ -124,18 +139,22 @@ var TZ=(function(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||
 /* ---------- talking to your Google Sheet ---------- */
 function server(fn,args,ok,fail){
   if(window.google&&google.script&&google.script.run){google.script.run.withSuccessHandler(ok).withFailureHandler(fail)[fn].apply(null,args);return;}
-  var e=encodeURIComponent,req;
-  if(fn==='getBoot') req=fetch(API_URL+'?action=boot&day='+e(args[0]||'')+'&hour='+e(args[1]==null?'':args[1])+'&tz='+e(args[2]||'')+'&name='+e(args[3]||''),{credentials:'omit'});
-  else if(fn==='getMe') req=fetch(API_URL+'?action=me&name='+e(args[0])+'&day='+e(args[1]||'')+'&tz='+e(args[2]||''),{credentials:'omit'});
-  else req=fetch(API_URL,{method:'POST',credentials:'omit',body:JSON.stringify({action:fn==='submitCheckin'?'checkin':fn==='submitFeedback'?'feedback':'reflection',payload:args[0]})});
-  req.then(function(r){return r.json();}).then(function(j){if(j&&j.ok)ok(j.data);else fail({message:(j&&j.error)||'Something went wrong. Please try again.'});})
-    .catch(function(){fail({message:'Connection problem. Please check your internet and try again.'});});
+  var e=encodeURIComponent,req,ctl=window.AbortController?new AbortController():null,done=false;
+  var opt={credentials:'omit'};if(ctl)opt.signal=ctl.signal;
+  var tm=setTimeout(function(){if(ctl)ctl.abort();},30000);
+  if(fn==='getBoot') req=fetch(API_URL+'?action=boot&day='+e(args[0]||'')+'&hour='+e(args[1]==null?'':args[1])+'&tz='+e(args[2]||'')+'&name='+e(args[3]||''),opt);
+  else if(fn==='getMe') req=fetch(API_URL+'?action=me&name='+e(args[0])+'&day='+e(args[1]||'')+'&tz='+e(args[2]||''),opt);
+  else{opt.method='POST';opt.body=JSON.stringify({action:fn==='submitCheckin'?'checkin':fn==='submitFeedback'?'feedback':'reflection',payload:args[0]});req=fetch(API_URL,opt);}
+  req.then(function(r){return r.json();}).then(function(j){clearTimeout(tm);if(j&&j.ok)ok(j.data);else fail({message:(j&&j.error)||'Something went wrong. Please try again.'});})
+    .catch(function(){clearTimeout(tm);fail({message:MSG_NET});});
 }
 
 /* ---------- helpers ---------- */
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function br(s){return esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');}
-function C(k){return (B&&B.content[k])||'';}
+function C(k){if(B&&B.content.hasOwnProperty(k))return B.content[k]||'';return QUIZ_DEF[k]||'';}
+/* Quiz + practice wording, used until these rows exist in the Content tab */
+var QUIZ_DEF={"quiz_q1_A": "My mind is active. Hard to switch off.", "quiz_q1_B": "My body feels tense. Neck, shoulders, jaw.", "quiz_q1_C": "I feel cold, achy, or deeply tired.", "quiz_q2_A": "Racing heart, palpitations, or dry mouth.", "quiz_q2_B": "Tight shoulders, neck, or jaw. I sigh a lot.", "quiz_q2_C": "Cold feet, lower back ache, or deep exhaustion.", "quiz_fine": "Actually, I feel fine.", "quiz_q3_A": "Quiet, darkness, slow breathing.", "quiz_q3_B": "Stretching, movement, a deep sigh.", "quiz_q3_C": "Warmth — warm drink, warm foot soak, warm lower back.", "quiz_mod_intro": "You selected \"I feel fine.\" That's great.", "quiz_mod_q": "Thinking about your usual pattern over the past few weeks, which of these feels most true? (Pick one)", "quiz_mod_options": "My sleep is okay, but I don't wake up fully restored.|I rely on something to help me sleep, wind down, or wake up.|My sleep is easily disrupted — I wake too early, too often, or it feels light and broken.|I feel fine — I just want to support my recovery.", "quiz_mod_results": "C|A|B|A", "prac_A_name": "Settle & Scan", "prac_A_intro": "", "prac_A_steps": "**Step 1 — Hands on Lower Belly**\nLie down or sit comfortably. Place both hands on your lower belly, below the navel. Feel the warmth of your palms. Let the belly soften under your hands.|**Step 2 — Body Scan with Natural Breath**\nKeep your hands on your lower belly. Now slowly move your attention through your body, from head to feet, relaxing as you scan. Breathe naturally — no need to control it. At each area, just notice. If there's tension, breathe into it once. Then move on. Don't hold on. Don't fix.|**Step 3 — Return to Hands**\nCome back to your hands on your lower belly. Feel the warmth. Breathe into your hands 3 times. Then stop. Remind yourself: \"Day is done. Rest is safe.\"", "prac_A_end": "", "prac_B_name": "Gentle Release", "prac_B_intro": "Don't hold tension. Don't force. Relax into each movement. If you catch yourself gripping, soften. The point is release, not stretch.", "prac_B_steps": "**Step 1 — Shoulders**\nRoll shoulders back 5×. Then forward 5×. Slow. Let them drop heavy.|**Step 2 — Neck**\nTilt right ear toward right shoulder. Don't push the stretch — just let the weight of your head do the work. Rest there for 3 sec. Switch. 3× each side. Then slow half-circles at the front — ear to shoulder, chin to chest, other ear to other shoulder. 3 rounds. Keep the jaw soft.|**Step 3 — Jaw**\nUnclench. Let the jaw drop open slightly. Don't clench. Don't grind. Massage the hinge (where jaw meets skull) with fingertips. 10 sec each side. Let it rest open.|**Step 4 — Side Body**\nReach right arm overhead, lean gently to the left. Don't force the lean. Just let gravity open the ribs. Stay for 3 breaths. Switch. 2× each side.|**Step 5 — Sigh**\n3 deep sighs. Inhale fully. Exhale with sound. Let the body soften on the exhale. Don't hold anything back.", "prac_B_end": "", "prac_C_name": "Warm & Rest", "prac_C_intro": "Choose one — whichever you prefer tonight:", "prac_C_steps": "**Option 1 — Foot Massage**\n• Sit comfortably.\n• Massage each foot until it feels warm. 2 min per foot.\n• Focus on: soles, inside ankle, arch and heel.\n• With or without oil. Both work.|**Option 2 — Warm Socks**\n• Put on warm socks. Keep them on until your feet feel warm, then take them off and get into bed.|**Option 3 — Warm Foot Soak**\n• Basin + comfortably warm water (not hot), 3–5 min.", "prac_C_end": "Then get into bed and rest."};
 function fill(s,o){return String(s||'').replace(/\{(\w+)\}/g,function(m,k){return o[k]!=null?o[k]:m;});}
 function list(k){return C(k).split('|').map(function(x){return x.trim();}).filter(Boolean);}
 function store(k,v){try{if(v)localStorage.setItem(k,v);else localStorage.removeItem(k);}catch(e){}}
@@ -150,12 +169,30 @@ function entriesText(n){return n===1?'1 chance':n+' chances';}
 function val(id){return String(F['t_'+id]||'').trim();}
 
 /* ---------- start ---------- */
+function livePage(){return !PDAY&&(PHOUR==null||PHOUR==='');}
 function boot(){
   var saved=recall('cultivate_name');
+  /* 1. show the saved copy from the last visit straight away */
+  if(livePage()&&saved){try{var c=JSON.parse(recall(PAGE_KEY)||'null');
+    if(c&&c.name===saved&&c.B&&Date.now()-c.t<48*3600e3){B=c.B;theme();NAME=saved;ME=c.B.me||null;STALE=true;SCR='home';render();}}catch(e){}}
+  if(!B)showLoading();
+  /* 4. slow-wifi helper after 8 seconds */
+  var slowT=setTimeout(function(){SLOW=true;if(B)render();else showLoading();},8000);
   server('getBoot',[PDAY,PHOUR,TZ,saved],function(b){
+    clearTimeout(slowT);SLOW=false;BOOTFAIL='';STALE=false;
     B=b;theme();
-    if(saved&&B.names.indexOf(saved)>-1){NAME=saved;if(B.me){ME=B.me;render();}else loadMe();}else render();
-  },function(e){app.innerHTML='<div class="load">Could not load. Please refresh.<br><small>'+esc(e&&e.message)+'</small></div>';});
+    if(saved&&B.names.indexOf(saved)>-1){NAME=saved;if(B.me){ME=B.me;render();}else{ME=null;loadMe();}}else{NAME='';ME=null;render();}
+  },function(e){clearTimeout(slowT);SLOW=false;BOOTFAIL=(e&&e.message)||MSG_NET;if(B)render();else showLoading();});
+}
+function showLoading(){
+  var h='<div class="load">';
+  if(BOOTFAIL)h+=esc(BOOTFAIL);else h+='Loading…'+(SLOW?'<div class="slow">'+esc(MSG_SLOW)+'</div>':'');
+  if(BOOTFAIL||SLOW)h+='<button class="btn sec retry" onclick="location.reload()">Try again</button>';
+  app.innerHTML=h+'</div>';
+}
+function savePage(){
+  if(!livePage()||STALE||!B||!NAME||!ME)return;
+  try{var copy={};for(var k in B)copy[k]=B[k];copy.me=ME;localStorage.setItem(PAGE_KEY,JSON.stringify({t:Date.now(),name:NAME,B:copy}));}catch(e){}
 }
 function loadMe(){server('getMe',[NAME,PDAY,TZ],function(m){ME=m;render();},function(){ME=null;render();});}
 function theme(){
@@ -166,13 +203,15 @@ function theme(){
   document.title=s.program_name||document.title;
 }
 function call(fn,args,ok){
-  BUSY=true;ERR='';render();
-  server(fn,args,function(r){BUSY=false;ok(r);},function(e){BUSY=false;ERR=(e&&e.message)||'Something went wrong. Please try again.';render();});
+  BUSY=true;ERR='';SAVESLOW=false;render();
+  var t=setTimeout(function(){if(BUSY){SAVESLOW=true;render();}},10000);
+  server(fn,args,function(r){clearTimeout(t);BUSY=false;SAVESLOW=false;ok(r);},function(e){clearTimeout(t);BUSY=false;SAVESLOW=false;ERR=(e&&e.message)||'Something went wrong. Please try again.';render();});
 }
 
 /* ---------- building blocks ---------- */
 function header(pill){
   var s=B.settings,h='';
+  if(STALE)h+='<div class="upd">'+(BOOTFAIL?esc(BOOTFAIL):SLOW?esc(MSG_SLOW):'Updating…')+((BOOTFAIL||SLOW)?' <button class="lnk" onclick="location.reload()">Try again</button>':'')+'</div>';
   if(B.preview)h+='<div class="pv">Preview mode · Day '+B.day+(B.week===3?' · '+B.hour+':00':'')+'</div>';
   h+='<div class="top">'+(s.logo_url?img(s.logo_url,'logo'):'')+'<div class="nm">'+esc(s.program_name)+'</div><div class="sb">'+esc(s.subtitle)+'</div>';
   if(pill)h+='<div class="pill done">'+esc(pill)+'</div>';
@@ -198,9 +237,8 @@ function ta(id,max,min){
     (min?'<div class="wc'+(n>=min?' good':'')+'" id="wc_'+id+'">'+esc(fill(C('words_counter'),{n:n,min:min}))+'</div>':'');
 }
 function steps(l){
-  var items=list('practice_'+l+'_steps').map(function(s){return '<li>'+esc(s)+'</li>';}).join('');
-  var tag=C('practice_'+l+'_numbered')==='yes'?'ol':'ul';
-  return (C('practice_'+l+'_lead')?'<div>'+esc(C('practice_'+l+'_lead'))+'</div>':'')+'<'+tag+'>'+items+'</'+tag+'>'+'<div class="end">'+esc(C('practice_'+l+'_end'))+'</div>';
+  var blocks=list('prac_'+l+'_steps').map(function(s){return '<div class="stp">'+br(s).replace(/<\/b><br>/g,'</b>')+'</div>';}).join('');
+  return (C('prac_'+l+'_intro')?'<div class="pin">'+br(C('prac_'+l+'_intro'))+'</div>':'')+blocks+(C('prac_'+l+'_end')?'<div class="end">'+br(C('prac_'+l+'_end'))+'</div>':'');
 }
 function dots(){
   var d=(ME&&ME.days)||[],h='<div class="dots">';
@@ -234,7 +272,7 @@ function groupCard(kind){
   return '<div class="card ctr">'+esc(t)+'</div>';
 }
 function errBox(){return ERR?'<div class="err">'+esc(ERR)+'</div>':'';}
-function btn(label,act,cls){return errBox()+'<button class="btn'+(cls?' '+cls:'')+'" data-act="'+act+'"'+(BUSY?' disabled':'')+'>'+(BUSY?'Saving…':esc(label))+'</button>';}
+function btn(label,act,cls){return errBox()+'<button class="btn'+(cls?' '+cls:'')+'" data-act="'+act+'"'+(BUSY?' disabled':'')+'>'+(BUSY?'Saving…':esc(label))+'</button>'+(BUSY&&SAVESLOW?'<div class="slow ctr">'+esc(MSG_SAVE_SLOW)+'</div>':'');}
 function acuCard(l){
   var h='<div class="card acc"><div class="lab">'+esc(C('acu_label'))+'</div><div class="how"><b>How:</b> '+esc(C('acu_how'))+'</div>';
   var pts=[1,2].filter(function(n){return C('acu_'+l+n+'_name');});
@@ -273,16 +311,20 @@ S.home=function(){
 
 /* Week 1 */
 S.w1q=function(){
-  var q=function(n){return LENS.map(function(l){return opt('q'+n,l,l,C('w1_q'+n+'_'+l),C('w1_q'+n+'_'+l+'_sub'));}).join('');};
+  var q=function(n){return LENS.map(function(l){return opt('q'+n,l,l,C('quiz_q'+n+'_'+l));}).join('')+opt('q'+n,'D','D',C('quiz_fine'));};
   return header()+'<h1>'+esc(C('w1_title'))+'</h1><p class="mut">'+esc(C('w1_intro'))+'</p><div class="q">'+esc(C('w1_q1'))+'</div>'+q(1)+'<div class="q">'+esc(C('w1_q2'))+'</div>'+q(2)+btn('Next','w1next');
 };
 S.w1q3=function(){
-  return header()+'<div class="q" style="margin-top:0">'+esc(C('w1_q3'))+'</div>'+LENS.map(function(l){return opt('q3',l,l,C('w1_q3_'+l));}).join('')+btn(C('w1_see_practice'),'w1q3');
+  return header()+'<div class="q" style="margin-top:0">'+esc(C('w1_q3'))+'</div>'+LENS.map(function(l){return opt('q3',l,l,C('quiz_q3_'+l));}).join('')+btn(C('w1_see_practice'),'w1q3');
+};
+S.w1mod=function(){
+  return header()+'<p style="font-weight:600;margin:0 0 6px">'+esc(C('quiz_mod_intro'))+'</p><div class="q" style="margin-top:0">'+esc(C('quiz_mod_q'))+'</div>'+
+    list('quiz_mod_options').map(function(t,i){return opt('mod',String(i),'',t);}).join('')+btn(C('w1_see_practice'),'w1mod');
 };
 S.w1res=function(){
   var l=F.lens;
-  return header()+'<div class="card"><div class="lab">'+esc(C('label_result'))+'</div><h2>'+l+' — '+esc(lensTitle(l))+'</h2><div class="tcm" style="margin:0 0 8px">TCM lens: '+esc(C('lens_'+l+'_tcm'))+'</div><div>'+esc(C('lens_'+l+'_intro'))+'</div></div>'+
-    '<div class="card"><div class="lab">'+esc(C('label_tonight'))+'</div><h2>'+esc(C('practice_'+l+'_name'))+'</h2><div class="mut">'+esc(C('practice_before'))+'</div>'+steps(l)+'</div>'+
+  return header()+'<div class="card"><div class="lab">'+esc(C('label_result'))+'</div><h2>'+l+' — '+esc(lensTitle(l))+'</h2><div class="tcm" style="margin:0 0 8px">TCM lens: '+esc(C('lens_'+l+'_tcm'))+'</div>'+(F.mod?'':'<div>'+esc(C('lens_'+l+'_intro'))+'</div>')+'</div>'+
+    '<div class="card"><div class="lab">'+esc(C('label_tonight'))+'</div><h2>'+esc(C('prac_'+l+'_name'))+'</h2><div class="mut">'+esc(C('practice_before'))+'</div>'+steps(l)+'</div>'+
     '<div class="closing">'+esc(C('closing_line'))+'</div>'+btn(C('btn_done_checkin'),'toci');
 };
 
@@ -292,7 +334,7 @@ S.choose=function(){
 };
 S.prac=function(){
   var l=F.lens;
-  return header()+'<div class="card"><div class="lab">'+esc(C('label_nighttime'))+'</div><h2>'+l+' — '+esc(lensTitle(l))+'</h2><div style="font-weight:600;margin-top:6px">'+esc(C('practice_'+l+'_name'))+'</div><div class="mut">'+esc(C('practice_before'))+'</div>'+steps(l)+'<div class="tcm">TCM lens: '+esc(C('lens_'+l+'_tcm'))+'</div></div>'+
+  return header()+'<div class="card"><div class="lab">'+esc(C('label_nighttime'))+'</div><h2>'+l+' — '+esc(lensTitle(l))+'</h2><div style="font-weight:600;margin-top:6px">'+esc(C('prac_'+l+'_name'))+'</div><div class="mut">'+esc(C('practice_before'))+'</div>'+steps(l)+'<div class="tcm">TCM lens: '+esc(C('lens_'+l+'_tcm'))+'</div></div>'+
     acuCard(l)+(C('oil_'+l)?'<div class="card"><div class="lab">'+esc(C('oil_label'))+'</div>'+esc(C('oil_'+l))+'</div>':'')+
     '<div class="closing">'+esc(C('closing_line'))+'</div>'+btn(C('btn_done_checkin'),'toci')+'<div class="safety">'+esc(C('acu_safety'))+'</div>';
 };
@@ -357,7 +399,7 @@ S.done=function(){
   if(LAST&&l){
     var codes=C('acu_'+l+'_codes');
     if(B.week===1)share=fill(C('share_w1_'+l),{day:B.day});
-    else if(B.week===2)share=fill(C('share_w2'),{day:B.day,practice:C('practice_'+l+'_name').toLowerCase(),codes:codes});
+    else if(B.week===2)share=fill(C('share_w2'),{day:B.day,practice:C('prac_'+l+'_name').toLowerCase(),codes:codes});
     else share=fill(C('share_w3'),{day:B.day,morning:(F.mdid&&F.mdid!=='none')?'Morning: '+C('m_'+F.mdid+'_title').toLowerCase()+' · ':'',lens:lensTitle(l).toLowerCase(),codes:codes});
   } else if(LASTR) share=fill(C('share_reflection'),{day:LASTR.reflection});
   if(share)h+='<a class="btn wa" href="https://wa.me/?text='+encodeURIComponent(share)+'" target="_blank" rel="noopener">'+esc(C('share_btn'))+'</a>';
@@ -415,7 +457,9 @@ function finalPage(fd){
 /* ---------- render + events ---------- */
 function render(){
   if(!B)return;
+  app.className='wrap'+(STALE?' stale':'');
   app.innerHTML=S[SCR]();
+  savePage();
   var sel=document.getElementById('nm');
   if(sel)sel.onchange=function(){NAME=sel.value;ME=null;store('cultivate_name',NAME);if(NAME)loadMe();else render();};
 }
@@ -428,15 +472,19 @@ app.addEventListener('click',function(e){
   var m=e.target.closest('[data-m]');
   if(m){var f=m.getAttribute('data-m'),v=m.getAttribute('data-v');F[f]=F[f]||[];var i=F[f].indexOf(v);if(i>-1)F[f].splice(i,1);else F[f].push(v);ERR='';render();return;}
   var g=e.target.closest('[data-go]');
-  if(g&&!BUSY){if(g.getAttribute('data-go')==='home'){LAST=null;LASTR=null;}go(g.getAttribute('data-go'));return;}
-  var a=e.target.closest('[data-act]');if(!a||BUSY)return;
+  if(g&&!BUSY&&!STALE){if(g.getAttribute('data-go')==='home'){LAST=null;LASTR=null;}go(g.getAttribute('data-go'));return;}
+  var a=e.target.closest('[data-act]');if(!a||BUSY||STALE)return;
   var act=a.getAttribute('data-act');
   if(act==='start'){F={};LAST=null;LASTR=null;go(B.week===1?'w1q':B.week===2?'choose':'since');}
   if(act==='morning'){F={};go('mmenu');}
   if(act==='fb'){var v=a.getAttribute('data-v');if(F.fb===v&&F.fbSaved)return;F.fb=v;F.fbSaved=false;
     call('submitFeedback',[{name:NAME,answer:v}],function(){F.fbSaved=true;if(ME&&ME.final)ME.final.joinAgain=v;render();});return;}
   if(act==='mshow'){if(!need(['m'],'Please choose one first.'))return;go('mprac');}
-  if(act==='w1next'){if(!need(['q1','q2']))return;if(F.q1===F.q2){F.lens=F.q1;F.q3='';go('w1res');}else go('w1q3');}
+  if(act==='w1next'){if(!need(['q1','q2']))return;F.q3='';F.mod='';
+    if(F.q1==='D'&&F.q2==='D'){go('w1mod');}
+    else if(F.q1==='D'||F.q2==='D'||F.q1===F.q2){F.lens=F.q1==='D'?F.q2:F.q1;go('w1res');}
+    else go('w1q3');}
+  if(act==='w1mod'){if(!need(['mod'],'Please choose one.'))return;var map=list('quiz_mod_results');F.lens=map[+F.mod]||'A';go('w1res');}
   if(act==='w1q3'){if(!need(['q3']))return;F.lens=F.q3;go('w1res');}
   if(act==='since'){if(!need(['bed','mdid']))return;go('choose');}
   if(act==='chosen'){if(!need(['lens'],'Please choose one first.'))return;go('prac');}
@@ -444,8 +492,8 @@ app.addEventListener('click',function(e){
   if(act==='refl'){REFL=parseInt(a.getAttribute('data-r'),10);F={};LAST=null;LASTR=null;go('refl');}
   if(act==='submit'){
     if(!need(['result'],'Please choose how tonight went.'))return;
-    var p={name:NAME,previewDay:PDAY,tz:TZ,q1:F.q1||'',q2:F.q2||'',q3:F.q3||'',lens:F.lens?F.lens+' — '+lensTitle(F.lens):'',practice:F.lens?C('practice_'+F.lens+'_name'):'',
-      result:F.result,note:val('note'),bedtime:F.bed?C(F.bed==='early'?'bed_early':'bed_late'):'',morning:F.mdid?(F.mdid==='none'?C('morning_none'):C('m_'+F.mdid+'_title')):''};
+    var p={name:NAME,previewDay:PDAY,tz:TZ,q1:F.q1||'',q2:F.q2||'',q3:F.q3||'',lens:F.lens?F.lens+' — '+lensTitle(F.lens):'',practice:F.lens?C('prac_'+F.lens+'_name'):'',
+      result:F.result,note:val('note'),modifier:F.mod?list('quiz_mod_options')[+F.mod]||'':'',bedtime:F.bed?C(F.bed==='early'?'bed_early':'bed_late'):'',morning:F.mdid?(F.mdid==='none'?C('morning_none'):C('m_'+F.mdid+'_title')):''};
     call('submitCheckin',[p],function(r){LAST=r;LASTR=null;ME=r.me;B.group=r.group;if(B.checkedTonight.indexOf(NAME)===-1)B.checkedTonight.push(NAME);
       F={lens:F.lens,mdid:F.mdid};
       if(ME.openReflections&&ME.openReflections.length){REFL=ME.openReflections[0];go('refl');}else go('done');});
